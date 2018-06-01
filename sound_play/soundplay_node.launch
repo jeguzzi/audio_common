@@ -1,11 +1,13 @@
-<!-- 
+<!--
 This launch file starts soundplay_node.py, which is the node that plays
-sounds based on messages on the robotsound topic.  
+sounds based on messages on the robotsound topic.
 -->
 
 <launch>
   <arg name="device" default="" />
+  <arg name="speech_engine" default="festival" />
   <node name="soundplay_node" pkg="sound_play" type="soundplay_node.py">
     <param name="device" value="$(arg device)" />
+    <param name="speech_engine" value="$(arg speech_engine)" />
   </node>
 </launch>

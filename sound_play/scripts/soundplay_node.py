@@ -165,14 +165,13 @@ class soundtype:
         position = 0
         duration = 0
         try:
-            position = self.sound.query_position(Gst.Format.TIME)[0]
-            duration = self.sound.query_duration(Gst.Format.TIME)[0]
+            position = self.sound.query_position(Gst.Format.TIME)[1]
+            duration = self.sound.query_duration(Gst.Format.TIME)[1]
         except Exception, e:
             position = 0
             duration = 0
         finally:
             self.lock.release()
-
         if position != duration:
             self.staleness = 0
         else:
@@ -230,24 +229,29 @@ class soundplay:
             print data
             if not data.arg in self.voicesounds.keys():
                 rospy.logdebug('command for uncached text: "%s"' % data.arg)
-                txtfile = tempfile.NamedTemporaryFile(prefix='sound_play', suffix='.txt')
                 (wavfile,wavfilename) = tempfile.mkstemp(prefix='sound_play', suffix='.wav')
-                txtfilename=txtfile.name
                 os.close(wavfile)
                 voice = data.arg2
-                try:
-                    txtfile.write(data.arg)
-                    txtfile.flush()
-                    os.system("text2wave -eval '("+voice+")' "+txtfilename+" -o "+wavfilename)
-                    try:
-                        if os.stat(wavfilename).st_size == 0:
-                            raise OSError # So we hit the same catch block
-                    except OSError:
-                        rospy.logerr('Sound synthesis failed. Is festival installed? Is a festival voice installed? Try running "rosdep satisfy sound_play|sh". Refer to http://wiki.ros.org/sound_play/Troubleshooting')
-                        return
+                if self.speech_engine == 'pico':
+                    print('pico2wave -l={voice} -w {wavfilename} "{data.arg}"'.format(**locals()))
+                    os.system('pico2wave -l={voice} -w {wavfilename} "{data.arg}"'.format(**locals()))
                     self.voicesounds[data.arg] = soundtype(wavfilename, self.device, data.volume)
-                finally:
-                    txtfile.close()
+                else:
+                    txtfile = tempfile.NamedTemporaryFile(prefix='sound_play', suffix='.txt')
+                    txtfilename=txtfile.name
+                    try:
+                        txtfile.write(data.arg)
+                        txtfile.flush()
+                        os.system("text2wave -eval '("+voice+")' "+txtfilename+" -o "+wavfilename)
+                        try:
+                            if os.stat(wavfilename).st_size == 0:
+                                raise OSError # So we hit the same catch block
+                        except OSError:
+                            rospy.logerr('Sound synthesis failed. Is festival installed? Is a festival voice installed? Try running "rosdep satisfy sound_play|sh". Refer to http://wiki.ros.org/sound_play/Troubleshooting')
+                            return
+                        self.voicesounds[data.arg] = soundtype(wavfilename, self.device, data.volume)
+                    finally:
+                        txtfile.close()
             else:
                 rospy.logdebug('command for cached text: "%s"'%data.arg)
                 if self.voicesounds[data.arg].sound.get_property('volume') != data.volume:
@@ -395,6 +399,7 @@ class soundplay:
     def __init__(self):
         Gst.init(None)
         rospy.init_node('sound_play')
+        self.speech_engine = rospy.get_param("~speech_engine", 'festival')
         self.device = rospy.get_param("~device", str())
         self.diagnostic_pub = rospy.Publisher("/diagnostics", DiagnosticArray, queue_size=1)
         rootdir = os.path.join(roslib.packages.get_pkg_dir('sound_play'),'sounds')
